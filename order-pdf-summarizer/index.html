@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Order PDF Summarizer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f4f0;
+      color: #1a1a18;
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+    .container { max-width: 960px; margin: 0 auto; }
+    header { margin-bottom: 2rem; }
+    header h1 { font-size: 22px; font-weight: 500; color: #1a1a18; }
+    header p { font-size: 14px; color: #5f5e5a; margin-top: 4px; }
+
+    .drop-zone {
+      border: 1.5px dashed #b4b2a9;
+      border-radius: 12px;
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: background 0.15s;
+      background: #eeecea;
+    }
+    .drop-zone:hover, .drop-zone.drag-over { background: #e4e2de; }
+    .drop-zone input { display: none; }
+    .drop-icon { font-size: 30px; margin-bottom: 12px; }
+    .drop-title { font-size: 15px; font-weight: 500; color: #1a1a18; margin-bottom: 4px; }
+    .drop-sub { font-size: 13px; color: #5f5e5a; }
+    .file-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #e6f1fb; color: #0c447c;
+      border-radius: 8px; padding: 6px 12px;
+      font-size: 13px; font-weight: 500; margin-top: 12px;
+    }
+
+    .actions { display: flex; gap: 10px; margin-top: 16px; align-items: center; flex-wrap: wrap; }
+    button {
+      padding: 9px 20px; font-size: 14px; font-weight: 500;
+      border-radius: 8px; cursor: pointer;
+      border: 0.5px solid #b4b2a9;
+      background: #ffffff; color: #1a1a18;
+      transition: background 0.12s, transform 0.1s;
+    }
+    button:hover { background: #f0eeea; }
+    button:active { transform: scale(0.98); }
+    .btn-primary { background: #1a1a18; color: #ffffff; border-color: transparent; }
+    .btn-primary:hover { background: #2c2c2a; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+    .status { font-size: 13px; color: #5f5e5a; }
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid #d3d1c7; border-top-color: #1a1a18;
+      border-radius: 50%; animation: spin 0.7s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error {
+      color: #a32d2d; font-size: 13px; margin-top: 10px;
+      padding: 10px 14px; background: #fcebeb; border-radius: 8px;
+    }
+
+    .result-section { margin-top: 2rem; }
+    .result-header {
+      display: flex; justify-content: space-between;
+      align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;
+    }
+    .result-title { font-size: 15px; font-weight: 500; color: #1a1a18; }
+    .stats { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+    .stat-card { background: #eeecea; border-radius: 8px; padding: 10px 16px; min-width: 120px; }
+    .stat-label { font-size: 11px; color: #5f5e5a; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+    .stat-val { font-size: 22px; font-weight: 500; color: #1a1a18; }
+    .stat-val.warn { color: #854f0b; }
+
+    .table-wrap { overflow-x: auto; border-radius: 8px; border: 0.5px solid #d3d1c7; background: #ffffff; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      background: #f1efe8; color: #5f5e5a; font-weight: 500;
+      padding: 8px 10px; text-align: center;
+      border-bottom: 0.5px solid #d3d1c7; white-space: nowrap; font-size: 12px;
+    }
+    th:first-child, th:nth-child(2), th:nth-child(3) { text-align: left; }
+    td {
+      padding: 7px 10px; border-bottom: 0.5px solid #eeece9;
+      color: #1a1a18; text-align: center; white-space: nowrap;
+    }
+    td:first-child, td:nth-child(2), td:nth-child(3) { text-align: left; }
+    tr:last-child td { border-bottom: none; }
+    .subtotal-row td { background: #f7f5f2; font-weight: 500; }
+    .grand-row td { font-weight: 500; background: #f1efe8; border-top: 1px solid #d3d1c7; }
+    .tag { font-size: 11px; padding: 2px 7px; border-radius: 100px; display: inline-block; }
+    .tag-bo { background: #faeeda; color: #854f0b; }
+    .note-col { font-size: 11px; color: #888780; }
+    .dash { color: #d3d1c7; }
+    .export-btn { font-size: 12px; padding: 6px 14px; }
+    .footer-note { font-size: 11px; color: #888780; margin-top: 8px; }
+
+    .api-section {
+      background: #ffffff; border: 0.5px solid #d3d1c7;
+      border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem;
+    }
+    .api-label { font-size: 13px; font-weight: 500; color: #1a1a18; margin-bottom: 6px; display: block; }
+    .api-sub { font-size: 12px; color: #5f5e5a; margin-bottom: 10px; }
+    .api-row { display: flex; gap: 8px; align-items: center; }
+    .api-input {
+      flex: 1; padding: 8px 12px; font-size: 13px;
+      border: 0.5px solid #b4b2a9; border-radius: 8px;
+      background: #f5f4f0; color: #1a1a18; font-family: monospace;
+    }
+    .api-input:focus { outline: none; border-color: #888780; }
+    .api-saved { font-size: 12px; color: #3b6d11; margin-top: 6px; display: none; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Order PDF summarizer</h1>
+    <p>Upload an order PDF to generate a size-by-size quantity summary table.</p>
+  </header>
+
+  <div class="api-section">
+    <label class="api-label" for="apiKey">Anthropic API key</label>
+    <p class="api-sub">Required to process PDFs. Your key is stored only in your browser session and never sent anywhere except directly to Anthropic.</p>
+    <div class="api-row">
+      <input type="password" id="apiKey" class="api-input" placeholder="sk-ant-..." />
+      <button onclick="saveKey()">Save</button>
+    </div>
+    <div class="api-saved" id="apiSaved">Key saved for this session.</div>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept="application/pdf" />
+    <div class="drop-icon">📄</div>
+    <div class="drop-title">Drop your order PDF here</div>
+    <div class="drop-sub">or click to browse</div>
+    <div id="fileBadge"></div>
+  </div>
+
+  <div class="actions">
+    <button class="btn-primary" id="analyzeBtn" disabled>Analyze PDF</button>
+    <button id="clearBtn" style="display:none">Clear</button>
+    <span class="status" id="statusMsg"></span>
+  </div>
+
+  <div id="errorMsg"></div>
+  <div class="result-section" id="resultSection" style="display:none"></div>
+</div>
+
+<script>
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const clearBtn = document.getElementById('clearBtn');
+const fileBadge = document.getElementById('fileBadge');
+const statusMsg = document.getElementById('statusMsg');
+const errorMsg = document.getElementById('errorMsg');
+const resultSection = document.getElementById('resultSection');
+
+let pdfBase64 = null;
+
+function saveKey() {
+  const val = document.getElementById('apiKey').value.trim();
+  if (val) {
+    sessionStorage.setItem('anthro_key', val);
+    document.getElementById('apiSaved').style.display = 'block';
+  }
+}
+
+function getKey() {
+  return document.getElementById('apiKey').value.trim() || sessionStorage.getItem('anthro_key') || '';
+}
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type === 'application/pdf') loadFile(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+function loadFile(f) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    pdfBase64 = reader.result.split(',')[1];
+    fileBadge.innerHTML = '<div class="file-badge">📎 ' + f.name + ' (' + (f.size/1024).toFixed(1) + ' KB)</div>';
+    analyzeBtn.disabled = false;
+    clearBtn.style.display = 'inline-block';
+    errorMsg.innerHTML = '';
+    resultSection.style.display = 'none';
+  };
+  reader.readAsDataURL(f);
+}
+
+clearBtn.addEventListener('click', () => {
+  pdfBase64 = null;
+  fileBadge.innerHTML = '';
+  analyzeBtn.disabled = true;
+  clearBtn.style.display = 'none';
+  statusMsg.textContent = '';
+  errorMsg.innerHTML = '';
+  resultSection.style.display = 'none';
+  fileInput.value = '';
+});
+
+analyzeBtn.addEventListener('click', async () => {
+  if (!pdfBase64) return;
+  const apiKey = getKey();
+  if (!apiKey) {
+    errorMsg.innerHTML = '<div class="error">Please enter your Anthropic API key above first.</div>';
+    return;
+  }
+
+  analyzeBtn.disabled = true;
+  statusMsg.innerHTML = '<span class="spinner"></span>Reading PDF...';
+  errorMsg.innerHTML = '';
+  resultSection.style.display = 'none';
+
+  const prompt = `You are an order processing assistant. Extract ALL line items from this order PDF and return ONLY a JSON object (no markdown, no explanation).
+
+The JSON must have this structure:
+{
+  "order_number": "string or null",
+  "company": "string or null",
+  "total_items": number or null,
+  "items": [
+    {
+      "item_number": "string",
+      "color": "string",
+      "description": "string",
+      "notes": "string or null (e.g. Back order, White INK, etc)",
+      "sizes": {
+        "YXS": number, "YS": number, "YM": number, "YL": number, "YXL": number,
+        "XS": number, "S": number, "M": number, "L": number, "XL": number,
+        "2XL": number, "3XL": number, "4XL": number
+      },
+      "total": number
+    }
+  ]
+}
+
+Rules:
+- Use 0 (not null) for sizes with no quantity
+- If the same item#/color combo appears multiple times, keep them as SEPARATE rows
+- Extract every single line item, do not skip any
+- Return ONLY the JSON object, nothing else`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    statusMsg.innerHTML = '<span class="spinner"></span>Processing data...';
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'API error');
+
+    const raw = data.content.map(i => i.text || '').join('');
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    renderResult(parsed);
+    statusMsg.textContent = '';
+    analyzeBtn.disabled = false;
+  } catch (err) {
+    statusMsg.textContent = '';
+    analyzeBtn.disabled = false;
+    errorMsg.innerHTML = '<div class="error">Error: ' + err.message + '</div>';
+  }
+});
+
+const SIZE_COLS = ['YXS','YS','YM','YL','YXL','XS','S','M','L','XL','2XL','3XL','4XL'];
+
+function renderResult(data) {
+  const items = data.items || [];
+  const usedSizes = SIZE_COLS.filter(s => items.some(it => it.sizes[s] > 0));
+
+  const grouped = {};
+  items.forEach(it => {
+    if (!grouped[it.item_number]) grouped[it.item_number] = [];
+    grouped[it.item_number].push(it);
+  });
+
+  let grandTotal = 0;
+  const grandSizes = {};
+  usedSizes.forEach(s => grandSizes[s] = 0);
+
+  let rows = '';
+  Object.entries(grouped).forEach(([itemNum, lines]) => {
+    const subtotalSizes = {};
+    usedSizes.forEach(s => subtotalSizes[s] = 0);
+    let subtotal = 0;
+
+    lines.forEach(it => {
+      let rowCells = '<td>' + it.item_number + '</td><td>' + it.color + '</td><td>' + it.description + (it.notes ? '<br><span class="note-col">' + it.notes + '</span>' : '') + '</td>';
+      usedSizes.forEach(s => {
+        const q = it.sizes[s] || 0;
+        subtotalSizes[s] += q;
+        rowCells += q > 0 ? '<td>' + q + '</td>' : '<td class="dash">-</td>';
+      });
+      const bo = it.notes && it.notes.toLowerCase().includes('back order');
+      rowCells += '<td>' + it.total + (bo ? ' <span class="tag tag-bo">BO</span>' : '') + '</td>';
+      rows += '<tr>' + rowCells + '</tr>';
+      subtotal += it.total;
+    });
+
+    if (lines.length > 1) {
+      let subCells = '<td></td><td></td><td style="color:#888780;font-size:12px">' + itemNum + ' subtotal</td>';
+      usedSizes.forEach(s => {
+        subCells += subtotalSizes[s] > 0 ? '<td>' + subtotalSizes[s] + '</td>' : '<td class="dash">-</td>';
+      });
+      subCells += '<td>' + subtotal + '</td>';
+      rows += '<tr class="subtotal-row">' + subCells + '</tr>';
+    }
+
+    usedSizes.forEach(s => grandSizes[s] += subtotalSizes[s]);
+    grandTotal += subtotal;
+  });
+
+  let grandCells = '<td colspan="3">Grand total</td>';
+  usedSizes.forEach(s => grandCells += grandSizes[s] > 0 ? '<td>' + grandSizes[s] + '</td>' : '<td class="dash">-</td>');
+  grandCells += '<td>' + grandTotal + '</td>';
+
+  const headers = '<tr><th>Item #</th><th>Color</th><th>Description</th>' + usedSizes.map(s => '<th>' + s + '</th>').join('') + '<th>Total</th></tr>';
+  const uniqueItems = Object.keys(grouped).length;
+  const backOrders = items.filter(i => i.notes && i.notes.toLowerCase().includes('back order')).length;
+
+  resultSection.innerHTML =
+    '<div class="result-header">' +
+      '<div class="result-title">' + (data.order_number ? 'Order ' + data.order_number : 'Order Summary') + (data.company ? ' — ' + data.company : '') + '</div>' +
+      '<button class="export-btn" onclick="exportCSV()">Export CSV</button>' +
+    '</div>' +
+    '<div class="stats">' +
+      '<div class="stat-card"><div class="stat-label">Total qty</div><div class="stat-val">' + grandTotal + '</div></div>' +
+      '<div class="stat-card"><div class="stat-label">Item types</div><div class="stat-val">' + uniqueItems + '</div></div>' +
+      '<div class="stat-card"><div class="stat-label">Line items</div><div class="stat-val">' + items.length + '</div></div>' +
+      (backOrders > 0 ? '<div class="stat-card"><div class="stat-label">Back orders</div><div class="stat-val warn">' + backOrders + '</div></div>' : '') +
+    '</div>' +
+    '<div class="table-wrap"><table><thead>' + headers + '</thead><tbody>' + rows + '<tr class="grand-row">' + grandCells + '</tr></tbody></table></div>' +
+    '<p class="footer-note">BO = Back order</p>';
+
+  resultSection.style.display = 'block';
+  window._exportData = { items, usedSizes };
+}
+
+function exportCSV() {
+  const { items, usedSizes } = window._exportData;
+  const headers = ['Item #','Color','Description','Notes',...usedSizes,'Total'];
+  const rows = items.map(it => [
+    it.item_number, it.color, it.description, it.notes || '',
+    ...usedSizes.map(s => it.sizes[s] || 0), it.total
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'order_summary.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
